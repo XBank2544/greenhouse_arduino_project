@@ -8,8 +8,10 @@
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 const char* WIFI_SSID = "Siriket_2.4GHz";
 const char* WIFI_PASSWORD = "0014072511";
-const char* host = "https://green-house-real.vercel.app/";
-const char* path = "api/update";
+String serverName = "https://green-house-real.vercel.app/api/update";
+
+unsigned long lastTime = 0;
+unsigned long timerDelay = 50000;
 
 int sensorPin = A0;
 int limit = 500;
@@ -29,12 +31,15 @@ void setup() {
   lcd.backlight();
 
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial.print("Connecting to Wi-Fi");
-  while (WiFi.status() != WL_CONNECTED) {
+   Serial.println("Connecting");
+  while(WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
-  Serial.println("Connected to Wi-Fi!");
+  Serial.println("");
+  Serial.print("Connected to WiFi network with IP Address: ");
+  Serial.println(WiFi.localIP());
+  Serial.println("Timer set to 5 seconds (timerDelay variable), it will take 5 seconds before publishing the first reading.");
 }
 void loop() {
   delay(dht22.getMinimumSamplingPeriod());
@@ -42,19 +47,40 @@ void loop() {
   float temperature = dht22.getTemperature();
   float sensorValue = analogRead(sensorPin);
 
-  HTTPClient http;
-  http.begin(host, path);
-  http.addHeader("Content-Type", "application/json");
-  String json = "{\"fan_start\" : \"30.00\", \"fan_stop\" : \"21.00\", \"start_at\" : \"2023-10-1 23:40:00\", \"end_at\" : \"2023-10-1 23:50:00\"}";
-  int httpCode = http.POST(json);
-  Serial.print("HTTP Status Code: ");
-  Serial.println(httpCode);
-  if (httpCode == 200) {
-    Serial.println("HTTP POST successful");
-    }   else {
-    Serial.println("HTTP POST failed");
+  if ((millis() - lastTime) > timerDelay) {
+    //Check WiFi connection status
+    if(WiFi.status()== WL_CONNECTED){
+      HTTPClient http;
+
+      String serverPath = serverName + "?temperature=24.37";
+      
+      // Your Domain name with URL path or IP address with path
+      http.begin(serverPath.c_str());
+      
+      // If you need Node-RED/server authentication, insert user and password below
+      //http.setAuthorization("REPLACE_WITH_SERVER_USERNAME", "REPLACE_WITH_SERVER_PASSWORD");
+      
+      // Send HTTP GET request
+      int httpResponseCode = http.GET();
+      
+      if (httpResponseCode>0) {
+        Serial.print("HTTP Response code: ");
+        Serial.println(httpResponseCode);
+        String payload = http.getString();
+        Serial.println(payload);
+      }
+      else {
+        Serial.print("Error code: ");
+        Serial.println(httpResponseCode);
+      }
+      // Free resources
+      http.end();
     }
-  http.end();
+    else {
+      Serial.println("WiFi Disconnected");
+    }
+    lastTime = millis();
+  }
   
   Serial.println("Status\tHumidity (%)\tTemperature (C)\t(F)\tAnalog Value");
   Serial.print(dht22.getStatusString());
